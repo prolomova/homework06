@@ -9,46 +9,35 @@ trait Eq[A] {
   def equiv(lft: A, rgt: A): Boolean
 }
 
+case class Scale(value: Int)
+
 object Eq {
 
-  implicit def Equivalent[A]: Eq[A] = (lft: A, rgt: A) => lft == rgt
+  implicit val intEq: Eq[Int] = (lft: Int, rgt: Int) => lft == rgt
+  implicit val strEq: Eq[String] = (lft: String, rgt: String) => lft == rgt
+  implicit val doubleEq: Eq[Double] = (lft: Double, rgt: Double) => lft == rgt
 
-  implicit class EqSeq[A](lft: Seq[A]) {
-    def ====(rgt: Seq[A])(implicit eq: Eq[A]): Boolean = {
-      if (lft.size == rgt.size) return forEach(lft.zip(rgt), eq)
-      false
-    }
-  }
+  implicit def eqSeq[A](implicit eq: Eq[A]): Eq[Seq[A]] = (lft, rgt) =>
+    lft.zip(rgt).forall(values => eq.equiv(values._1, values._2))
 
-  private def forEach[A](seq: Seq[(A, A)], eq: Eq[A]): Boolean = {
-    for (pair <- seq)
-      if (!eq.equiv(pair._1, pair._2)) return false
-    true
-  }
-
-  implicit class EqOption[A](lft: Option[A]) {
-    def ====(rgt: Option[A])(implicit eq: Eq[A]): Boolean = (lft, rgt) match {
-      case (Some(x1), Some(x2)) => eq.equiv(x1, x2)
+  implicit def eqOption[T: Eq](implicit eq: Eq[T]): Eq[Option[T]] =
+    (lft: Option[T], rgt: Option[T]) => (lft, rgt) match {
+      case (Some(val1), Some(val2)) => eq.equiv(val1, val2)
       case (None, None) => true
       case _ => false
     }
-  }
 
-  implicit class EqMap[K, V](lft: Map[K, V]) {
-    def ====(rgt: Map[K, V])(implicit kEq: Eq[K], vEq: Eq[V]): Boolean = {
-      if (lft.size == rgt.size) return forEach(lft.keys.zip(rgt.keys).toList, kEq) &&
-         forEach(lft.values.zip(rgt.values).toList, vEq)
-        false
-      }
-    }
+  implicit def eqMap[A, B](implicit eqA: Eq[A], eqB: Eq[B]): Eq[Map[A, B]] = (lft, rgt) =>
+      lft.values.zip(rgt.values).forall(values => eqB.equiv(values._1, values._2)) &&
+        lft.keys.zip(rgt.keys).forall(keys => eqA.equiv(keys._1, keys._2))
 
-  implicit class EqComplexNumber(lft: ComplexNumber) {
-    def ====(rgt: ComplexNumber, scale: Int = 2)(implicit eq: Eq[BigDecimal]): Boolean = {
-      val dblToBD = (double: Double) => BigDecimal(double)
-      eq.equiv(dblToBD(lft.real).setScale(scale, BigDecimal.RoundingMode.HALF_EVEN),
-        dblToBD(rgt.real).setScale(scale, BigDecimal.RoundingMode.HALF_EVEN)) &&
-        eq.equiv(dblToBD(lft.image).setScale(scale, BigDecimal.RoundingMode.HALF_EVEN),
-          dblToBD(rgt.image).setScale(scale, BigDecimal.RoundingMode.HALF_EVEN))
-    }
+  implicit def eqComplex(implicit scale: Scale = Scale(2), eq: Eq[Double]): Eq[ComplexNumber] =
+    (lft, rgt) => eq.equiv(BigDecimal(lft.real).setScale(scale.value, BigDecimal.RoundingMode.HALF_EVEN).toDouble,
+      BigDecimal(rgt.real).setScale(scale.value, BigDecimal.RoundingMode.HALF_EVEN).toDouble) &&
+      eq.equiv(BigDecimal(lft.image).setScale(scale.value, BigDecimal.RoundingMode.HALF_EVEN).toDouble,
+        BigDecimal(rgt.image).setScale(scale.value, BigDecimal.RoundingMode.HALF_EVEN).toDouble)
+
+  implicit class EqClass[A](lftEq: A) {
+    def ====(rgtEq: A)(implicit eq: Eq[A]): Boolean = eq.equiv(lftEq, rgtEq)
   }
 }
